@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Self-Service Portal</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f9; color: #333; margin: 0; padding: 2rem; }
+        .container { max-width: 800px; margin: auto; }
+        .card { background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 2rem; }
+        h1, h2 { color: #1a253c; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        input[type="text"], textarea { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+        .hidden { display: none; }
+        .status { font-weight: bold; padding: 0.2rem 0.6rem; border-radius: 10px; color: white; font-size: 0.8rem; }
+        .status-new { background-color: #ffc107; }
+        .status-closed { background-color: #6c757d; }
+        #historyContainer .ticket-item { border: 1px solid #e0e0e0; padding: 1rem; border-radius: 5px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>User Self-Service Portal</h1>
+            <div class="form-group">
+                <label for="clientIdInput">Your Client ID (e.g., CLI001 or CLI002)</label>
+                <input type="text" id="clientIdInput" placeholder="Enter your Client ID...">
+            </div>
+            <button id="historyBtn">View My Tickets</button>
+        </div>
+
+        <div id="historyCard" class="card hidden">
+            <h2>My Ticket History</h2>
+            <div id="historyContainer"></div>
+        </div>
+        
+        <div id="createCard" class="card hidden">
+            <h2>Submit a New Ticket</h2>
+            <div class="form-group">
+                <label for="assetIdInput">My Asset ID</label>
+                <input type="text" id="assetIdInput" placeholder="e.g., AST001">
+            </div>
+            <div class="form-group">
+                <label for="problemDescription">Problem Description</label>
+                <textarea id="problemDescription" rows="4"></textarea>
+            </div>
+            <button id="submitBtn">Submit New Ticket</button>
+            <div id="responseMessage" style="margin-top: 1rem;"></div>
+        </div>
+    </div>
+
+    <script>
+        const clientIdInput = document.getElementById('clientIdInput');
+        const historyBtn = document.getElementById('historyBtn');
+        const historyCard = document.getElementById('historyCard');
+        const createCard = document.getElementById('createCard');
+        const historyContainer = document.getElementById('historyContainer');
+        let currentClientId = null;
+
+        historyBtn.addEventListener('click', async () => {
+            currentClientId = clientIdInput.value.trim();
+            if (!currentClientId) {
+                alert('Please enter your Client ID.');
+                return;
+            }
+            
+            historyBtn.textContent = 'Refreshing...';
+            const apiUrl = `http://${window.location.hostname}:5000/history/${currentClientId}`;
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Could not fetch history.');
+                const tickets = await response.json();
+                
+                historyContainer.innerHTML = ''; // Clear previous history
+                if (tickets.length === 0) {
+                    historyContainer.innerHTML = '<p>No tickets found for this Client ID.</p>';
+                } else {
+                    tickets.forEach(ticket => {
+                        const ticketDiv = document.createElement('div');
+                        ticketDiv.className = 'ticket-item';
+                        ticketDiv.innerHTML = `
+                            <div>
+                                <strong>ID: ${ticket.id}</strong><br>
+                                <span>${ticket.subject}</span>
+                            </div>
+                            <span class="status status-${ticket.status.toLowerCase()}">${ticket.status}</span>
+                        `;
+                        historyContainer.appendChild(ticketDiv);
+                    });
+                }
+                historyCard.classList.remove('hidden');
+                createCard.classList.remove('hidden');
+            } catch (error) {
+                alert(error.message);
+            } finally {
+                historyBtn.textContent = 'View My Tickets';
+            }
+        });
+        
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.addEventListener('click', async () => {
+            // Logic to submit a new ticket (mostly unchanged)
+            const assetId = document.getElementById('assetIdInput').value.trim();
+            const description = document.getElementById('problemDescription').value.trim();
+            if (!assetId || !description || !currentClientId) { alert('Please fill out all fields.'); return; }
+            
+            submitBtn.textContent = 'Submitting...';
+            const apiUrl = `http://${window.location.hostname}:5000/create-ticket`;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ asset_id: assetId, description: description, client_id: currentClientId }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                
+                // Refresh history to show the new ticket
+                historyBtn.click();
+                // Clear the form
+                document.getElementById('assetIdInput').value = '';
+                document.getElementById('problemDescription').value = '';
+            } catch(error) {
+                alert('Error creating ticket: ' + error.message);
+            } finally {
+                submitBtn.textContent = 'Submit New Ticket';
+            }
+        });
+    </script>
+</body>
+</html>
